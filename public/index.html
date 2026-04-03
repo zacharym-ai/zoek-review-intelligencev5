@@ -955,14 +955,19 @@ function renderHistory(){
   el.innerHTML=hist.map((h,i)=>{
     const sc=scColor(h.report?.overallScore);
     const cc={green:'cg',yellow:'cy',red:'cr'}[sc];
-    return `<div class="hist-row" onclick="loadEntry(${i})" style="position:relative">` +
-`<span class="hr-date">${h.label||fmtDate(h.date)}</span>` +
-`<span class="hr-sum">${(h.report?.overallSummary||'').slice(0,80)}…</span>` +
-`<span class="hr-sc">${h.report?.overallScore?.toFixed(1)||'—'}</span>` +
-`<span class="schip ${cc}">${scLabel(h.report?.overallScore)}</span>` +
-`${role==='admin'?`<button onclick="event.stopPropagation();deleteEntry('${h.id}')" style="margin-left:12px;font-size:11px;font-family:'Inter',sans-serif;background:var(--rbg);color:var(--rt);border:none;border-radius:6px;padding:3px 10px;cursor:pointer;">Delete</button>`:''}` +
-`</div>`;<span class="hr-date">${h.label||fmtDate(h.date)}</span><span class="hr-sum">${(h.report?.overallSummary||'').slice(0,80)}…</span><span class="hr-sc">${h.report?.overallScore?.toFixed(1)||'—'}</span><span class="schip ${cc}">${scLabel(h.report?.overallScore)}</span></div>`;
+    const delBtn=role==='admin'&&h.id?'<button onclick="event.stopPropagation();deleteEntry(\'' + h.id + '\')" style="margin-left:12px;flex-shrink:0;font-size:11px;font-family:Inter,sans-serif;background:var(--rbg);color:var(--rt);border:none;border-radius:6px;padding:3px 10px;cursor:pointer;">Delete</button>':'';
+    return '<div class="hist-row" onclick="loadEntry('+i+')">'+'<span class="hr-date">'+(h.label||fmtDate(h.date))+'</span>'+'<span class="hr-sum">'+((h.report?.overallSummary||'').slice(0,80))+'...</span>'+'<span class="hr-sc">'+(h.report?.overallScore?.toFixed(1)||'—')+'</span>'+'<span class="schip '+cc+'">'+(scLabel(h.report?.overallScore))+'</span>'+delBtn+'</div>';
   }).join('');
+}
+async function deleteEntry(id){
+  if(!confirm('Delete this report? This cannot be undone.'))return;
+  try{
+    await fetch('/.netlify/functions/delete-report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    await loadSharedHistory();
+    renderHistory();
+    renderOverview();
+    renderPeople();
+  }catch(e){alert('Could not delete report.');}
 }
 function loadEntry(i){
   const e=getHist()[i];if(!e)return;
@@ -976,22 +981,7 @@ function loadEntry(i){
   showView('current');
 }
 function clearHist(){if(role!=='admin'){alert('Only admins can clear history.');return;}if(confirm('Clear all report history?')){sharedHistory=[];localStorage.removeItem(HK);renderHistory();document.getElementById('ovContent').innerHTML='<div class="empty"><strong>No data yet</strong>Go to "Input reviews" to generate your first report.</div>';}}
-async function deleteEntry(id) {
-  if(!confirm('Delete this report?')) return;
-  try {
-    await fetch('/.netlify/functions/delete-report', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({id})
-    });
-    await loadSharedHistory();
-    renderHistory();
-    renderOverview();
-  } catch(e) {
-    alert('Could not delete report.');
-  }
-}
-  
+
 // ── UTILS ──
 function scColor(s){if(!s)return'yellow';return s>=4.2?'green':s>=3.5?'yellow':'red';}
 function scLabel(s){if(!s)return'—';return s>=4.2?'Strong':s>=3.5?'Good':'Needs work';}
