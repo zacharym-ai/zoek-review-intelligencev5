@@ -500,10 +500,12 @@ let role='viewer', curReport=null, curPlat='google';
 let charts={};
 
 // ── INIT ──
-window.addEventListener('DOMContentLoaded',()=>{
+window.addEventListener('DOMContentLoaded',async ()=>{
   const u=localStorage.getItem(UK);
   if(u){const p=JSON.parse(u);loginAs(p.name,p.role);}
   document.getElementById('rDate').value=new Date().toISOString().split('T')[0];
+  document.getElementById('ovContent').innerHTML='<div class="loading-wrap"><div class="spinner"></div><div class="lt">Loading reports...</div></div>';
+  await loadSharedHistory();
   const h=getHist();
   if(h.length){
     curReport=h[0].report;
@@ -580,7 +582,7 @@ async function doGenerate(){
   try{
     const res=await fetch('/.netlify/functions/analyze',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({reportDate:label,reviews:{
+      body:JSON.stringify({reportDate:label,reportLabel:label,reviews:{
         google:g?{text:g,total:document.getElementById('gTot').value}:null,
         wix:w?{text:w,total:document.getElementById('wTot').value}:null,
         trustpilot:t?{text:t,total:document.getElementById('tTot').value}:null,
@@ -591,7 +593,7 @@ async function doGenerate(){
     const report=await res.json();
     report.responses=responses;
     curReport=report;
-    const entry={date:rd,label,report,ts:Date.now()};
+    const entry={date:rd,label,report,ts:Date.now(),responses:responses};
     saveHist(entry);
     renderOverview();
     renderCurrent(entry);
@@ -932,8 +934,20 @@ function renderPeople(){
 }
 
 // ── HISTORY ──
-function getHist(){try{return JSON.parse(localStorage.getItem(HK)||'[]');}catch{return[];}}
-function saveHist(e){const h=getHist();h.unshift(e);localStorage.setItem(HK,JSON.stringify(h.slice(0,48)));}
+let sharedHistory=[];
+async function loadSharedHistory(){
+  try{
+    const res=await fetch('/.netlify/functions/get-reports');
+    if(!res.ok)throw new Error('failed');
+    const data=await res.json();
+    sharedHistory=data.map(function(row){return{id:row.id,label:row.label,date:row.date,report:row.report,ts:new Date(row.created_at).getTime()};});
+  }catch(e){
+    console.warn('Supabase load failed, using local',e);
+    try{sharedHistory=JSON.parse(localStorage.getItem(HK)||'[]');}catch{sharedHistory=[];}
+  }
+}
+function getHist(){return sharedHistory;}
+function saveHist(e){sharedHistory.unshift(e);try{localStorage.setItem(HK,JSON.stringify(sharedHistory.slice(0,10)));}catch(err){}}
 function renderHistory(){
   const hist=getHist();
   const el=document.getElementById('histContent');
@@ -955,7 +969,7 @@ function loadEntry(i){
   setLup(e.date);
   showView('current');
 }
-function clearHist(){if(confirm('Clear all report history? This cannot be undone.')){localStorage.removeItem(HK);curReport=null;renderHistory();document.getElementById('ovContent').innerHTML='<div class="empty"><strong>No data yet</strong>Go to "Input reviews" to generate your first report.</div>';}}
+function clearHist(){if(role!=='admin'){alert('Only admins can clear history.');return;}if(confirm('Clear all report history?')){sharedHistory=[];localStorage.removeItem(HK);renderHistory();document.getElementById('ovContent').innerHTML='<div class="empty"><strong>No data yet</strong>Go to "Input reviews" to generate your first report.</div>';}}
 
 // ── UTILS ──
 function scColor(s){if(!s)return'yellow';return s>=4.2?'green':s>=3.5?'yellow':'red';}
